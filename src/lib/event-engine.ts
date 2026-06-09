@@ -98,13 +98,31 @@ export const EventEngine = {
   getFlightScores(): FlightScores { return { ...flightScores } },
   getEventHistory() { return eventHistory },
 
-  getStartingEvent(_taskName?: string): GameEvent {
+  async getStartingEvent(taskName?: string): Promise<GameEvent> {
     eventHistory = []
-    return this.getFallbackEvent()
+    const aiEvent = await this.fetchAIEvent({ taskName, stage: 'starting' })
+    return aiEvent || this.getFallbackEvent()
   },
 
-  getNextEvent(_context?: any, _eventIndex?: number, _isFinal?: boolean): GameEvent {
-    return this.getFallbackEvent()
+  async getNextEvent(_context?: any, _eventIndex?: number, _isFinal?: boolean): Promise<GameEvent> {
+    const aiEvent = await this.fetchAIEvent({ stage: 'next', eventIndex: _eventIndex })
+    return aiEvent || this.getFallbackEvent()
+  },
+
+  async fetchAIEvent(payload: { taskName?: string; stage: string; eventIndex?: number }): Promise<GameEvent | null> {
+    try {
+      const res = await fetch('/api/ai/generate-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (data.fallback) return null
+      if (!data.event || !data.event.choices) return null
+      return data.event as GameEvent
+    } catch {
+      return null
+    }
   },
 
   getFallbackEvent(): GameEvent {

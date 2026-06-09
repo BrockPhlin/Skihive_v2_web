@@ -29,6 +29,7 @@ export default function StoryPage() {
 
   // 打字机效果 - 旁白
   function typeNarration(text: string, onDone: () => void) {
+    if (typingRef.current) clearInterval(typingRef.current)
     setDisplayedNarration("")
     let i = 0
     typingRef.current = setInterval(() => {
@@ -36,6 +37,7 @@ export default function StoryPage() {
       setDisplayedNarration(text.slice(0, i))
       if (i >= text.length) {
         if (typingRef.current) clearInterval(typingRef.current)
+        typingRef.current = null
         setTimeout(onDone, 300)
       }
     }, 40)
@@ -43,6 +45,7 @@ export default function StoryPage() {
 
   function startDialogue(onDone: () => void) {
     setDialogueIdx(0)
+    setDialogueText("")
     typeDialogueLine(0, onDone)
   }
 
@@ -56,6 +59,7 @@ export default function StoryPage() {
       setDialogueText(line.slice(0, i))
       if (i >= line.length) {
         if (typingRef.current) clearInterval(typingRef.current)
+        typingRef.current = null
         setDialogueIdx(idx)
         setTimeout(() => typeDialogueLine(idx + 1, onDone), 400)
       }
@@ -65,6 +69,9 @@ export default function StoryPage() {
   function startScene() {
     if (!scene) return
     setShowOptions(false)
+    setDisplayedNarration("")
+    setDialogueText("")
+    setDialogueIdx(0)
     typeNarration(scene.narration, () => {
       if (dialogues.length > 0) {
         startDialogue(() => setShowOptions(true))
@@ -76,18 +83,36 @@ export default function StoryPage() {
 
   function openChapter(ch: Chapter) {
     if (ch.locked) return
+    if (typingRef.current) clearInterval(typingRef.current)
+    typingRef.current = null
+    setShowOptions(false)
+    setDisplayedNarration("")
+    setDialogueText("")
+    setDialogueIdx(0)
     setCurrentChapter(ch)
     setSceneIdx(0)
     setMode('play')
-    // delay to let render
     setTimeout(() => {
       const chap = CHAPTERS.find((c) => c.id === ch.id)
       if (chap) startScene()
-    }, 50)
+    }, 100)
+  }
+
+  function backToGrid() {
+    if (typingRef.current) clearInterval(typingRef.current)
+    typingRef.current = null
+    setShowOptions(false)
+    setDisplayedNarration("")
+    setDialogueText("")
+    setDialogueIdx(0)
+    setCurrentChapter(null)
+    setSceneIdx(0)
+    setMode('grid')
   }
 
   function handleOption(opt: StoryOption) {
     if (typingRef.current) clearInterval(typingRef.current)
+    typingRef.current = null
 
     if (opt.secretTrigger) {
       if (currentChapter) unlockChapter(currentChapter.id)
@@ -97,6 +122,10 @@ export default function StoryPage() {
       const nextChap = CHAPTERS.find((c) => c.id === opt.nextChapter)
       if (nextChap) {
         unlockChapter(currentChapter?.id || 0)
+        setShowOptions(false)
+        setDisplayedNarration("")
+        setDialogueText("")
+        setDialogueIdx(0)
         setCurrentChapter(nextChap)
         setSceneIdx(0)
         setTimeout(() => startScene(), 100)
@@ -108,32 +137,36 @@ export default function StoryPage() {
       if (opt.nextScene.startsWith('secret')) {
         alert('🔮 隐藏结局！你发现了故事的真谛——无人机不仅仅是工具，它们是人类探索天空的伙伴，是连接人与人之间的纽带。')
         if (currentChapter) unlockChapter(currentChapter.id)
-        setMode('grid')
+        backToGrid()
         return
       }
       if (opt.nextScene === 'ending_main') {
         alert('🌟 剧情完成！恭喜你完成了剧情模式的主线结局！')
         if (currentChapter) unlockChapter(currentChapter.id)
-        setMode('grid')
+        backToGrid()
         return
       }
       if (opt.nextScene === 'ending_secret') {
         alert('🔮 隐藏结局：你发现了所有人的真心。在这个充满挑战的世界里，正是信任创造了最美好的未来。')
         if (currentChapter) unlockChapter(currentChapter.id)
-        setMode('grid')
+        backToGrid()
         return
       }
     }
 
     const nextIdx = typeof opt.nextScene === 'number' ? opt.nextScene : sceneIdx + 1
     if (currentChapter && nextIdx < currentChapter.scenes.length) {
+      setShowOptions(false)
+      setDisplayedNarration("")
+      setDialogueText("")
+      setDialogueIdx(0)
       setSceneIdx(nextIdx)
       setTimeout(() => startScene(), 100)
     } else {
       // chapter end
       if (currentChapter) unlockChapter(currentChapter.id)
       alert(`🎉 章节完成！恭喜你完成了第${currentChapter?.id}章：${currentChapter?.title}`)
-      setMode('grid')
+      backToGrid()
     }
   }
 
@@ -150,29 +183,34 @@ export default function StoryPage() {
         </div>
         <p className="text-xs text-white/50 mb-6 text-center">MULTI-CHAPTER FLIGHT ADVENTURE</p>
         <div className="space-y-4">
-          {chapters.map((ch) => (
-            <button
-              key={ch.id}
-              onClick={() => openChapter(ch)}
-              disabled={ch.locked}
-              className={`w-full text-left p-5 rounded-2xl border transition-all ${ch.locked ? 'border-white/5 bg-white/[0.02] opacity-40 cursor-not-allowed' : 'border-[#a78bff]/20 bg-[#11152a] hover:border-[#a78bff]'}`}
-            >
-              <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#a78bff]/10 text-3xl flex-shrink-0">{ch.icon}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[10px] font-mono tracking-[0.2em] text-[#a78bff]">CH.0{ch.id}</span>
-                    {ch.locked && <span className="text-[10px] text-white/30">🔒</span>}
-                    {!ch.locked && !storySecretUnlocked[ch.id] && <span className="text-[10px] text-[#22c55e]">NEW</span>}
-                    {storySecretUnlocked[ch.id] && <span className="text-[10px] text-[#ffb547]">✓</span>}
+          {chapters.map((ch) => {
+            const unlocked = !ch.locked
+            return (
+              <button
+                key={ch.id}
+                onClick={() => openChapter(ch)}
+                disabled={ch.locked}
+                className={`w-full text-left p-5 rounded-2xl border transition-all ${ch.locked ? 'border-white/5 bg-white/[0.02] opacity-40 cursor-not-allowed' : 'border-[#a78bff]/20 bg-[#11152a] hover:border-[#a78bff]'}`}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#a78bff]/10 text-3xl flex-shrink-0">
+                    {unlocked ? ch.icon : '🔒'}
                   </div>
-                  <p className="text-base font-bold text-white">{ch.title}</p>
-                  <p className="text-xs text-white/40 mt-0.5">{ch.description}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] font-mono tracking-[0.2em] text-[#a78bff]">CH.0{ch.id}</span>
+                      {!unlocked && <span className="text-[10px] text-white/30">未解锁</span>}
+                      {unlocked && !storySecretUnlocked[ch.id] && <span className="text-[10px] text-[#22c55e]">NEW</span>}
+                      {storySecretUnlocked[ch.id] && <span className="text-[10px] text-[#ffb547]">✓ 已完成</span>}
+                    </div>
+                    <p className="text-base font-bold text-white">{ch.title}</p>
+                    <p className="text-xs text-white/40 mt-0.5">{ch.description}</p>
+                  </div>
+                  <span className="text-2xl text-white/30">{unlocked ? '›' : '🔒'}</span>
                 </div>
-                <span className="text-2xl text-white/30">›</span>
-              </div>
-            </button>
-          ))}
+              </button>
+            )
+          })}
         </div>
       </main>
     )
@@ -182,8 +220,12 @@ export default function StoryPage() {
   return (
     <main className="relative min-h-screen bg-gradient-to-b from-[#03040a] via-[#05060d] to-[#0a0d1c] px-5 pt-12 pb-32">
       <div className="flex items-center justify-between mb-4">
-        <button onClick={() => setMode('grid')} className="text-2xl text-white">←</button>
-        <span className="text-[10px] font-mono text-white/40">{currentChapter?.title}</span>
+        <button onClick={backToGrid} className="text-2xl text-white">←</button>
+        <span className="text-[10px] font-mono text-white/40">CH.0{currentChapter?.id} · {currentChapter?.title}</span>
+        {showOptions && (
+          <button onClick={backToGrid} className="text-[10px] text-white/30 px-2 py-1 rounded border border-white/10">← 返回章节</button>
+        )}
+        {!showOptions && <span className="w-16" />}
       </div>
 
       {/* Narration */}

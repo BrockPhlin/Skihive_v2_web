@@ -11,10 +11,11 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/records/list').then(r => r.json()).then(d => {
-      setRecords(d.records || [])
-      setLoading(false)
-    }).catch(() => setLoading(false))
+    try {
+      const stored = JSON.parse(localStorage.getItem('skihive_flight_records') || '[]') as Stats[]
+      setRecords(stored)
+    } catch { setRecords([]) }
+    setLoading(false)
   }, [])
 
   const stats = useMemo(() => {
