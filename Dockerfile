@@ -1,13 +1,14 @@
-# Stage 1 — 安装完整依赖 (含 devDependencies,prisma generate 需要)
+# Stage 1 — 安装完整依赖 (跳过 postinstall,等 build 阶段再 prisma generate)
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm install --ignore-scripts
 
 # Stage 2 — build
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
+COPY prisma ./prisma
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATABASE_URL=postgresql://placeholder:placeholder@localhost:5432/placeholder
