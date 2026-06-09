@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { CHAPTERS, type Chapter, type StoryOption, type DialogLine } from "@/lib/story-data"
 import { useFlightStore } from "@/stores/flight-store"
@@ -15,9 +15,8 @@ export default function StoryPage() {
   const [dialogueIdx, setDialogueIdx] = useState(0)
   const [dialogueText, setDialogueText] = useState("")
   const [showOptions, setShowOptions] = useState(false)
-  const typingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [stage, setStage] = useState<'idle' | 'narration' | 'dialogue' | 'options'>('idle')
 
-  // 计算章节解锁状态
   const chapters = CHAPTERS.map((ch) => {
     if (ch.id === 1) return { ...ch, locked: false }
     const prevCompleted = storySecretUnlocked[ch.id - 1]
@@ -26,68 +25,52 @@ export default function StoryPage() {
 
   const scene = currentChapter?.scenes[sceneIdx]
 
-  // 打字机效果 - 旁白
-  function typeNarration(text: string, onDone: () => void) {
-    if (typingRef.current) clearInterval(typingRef.current)
-    setDisplayedNarration("")
-    let i = 0
-    const id = setInterval(() => {
-      i++
-      setDisplayedNarration(text.slice(0, i))
-      if (i >= text.length) {
-        clearInterval(id)
-        typingRef.current = null
-        setTimeout(onDone, 300)
-      }
-    }, 40)
-    typingRef.current = id
-  }
+  // 旁白打字机：全文本一次性设，CSS animation 推进
+  useEffect(() => {
+    if (stage !== 'narration' || !scene) return
+    setDisplayedNarration(scene.narration)
+    // 旁白时长 = 字符数 × 40ms + 300ms buffer
+    const total = scene.narration.length * 40 + 300
+    const id = setTimeout(() => {
+      setStage('dialogue')
+    }, total)
+    return () => clearTimeout(id)
+  }, [stage, scene])
 
-  function startDialogue(lines: DialogLine[], onDone: () => void) {
-    setDialogueIdx(0)
-    setDialogueText("")
-    typeDialogueLine(0, lines, onDone)
-  }
-
-  function typeDialogueLine(idx: number, lines: DialogLine[], onDone: () => void) {
-    if (idx >= lines.length) { setTimeout(onDone, 300); return }
-    setDialogueText("")
-    const line = lines[idx].text
-    let i = 0
-    const id = setInterval(() => {
-      i++
-      setDialogueText(line.slice(0, i))
-      if (i >= line.length) {
-        clearInterval(id)
-        setDialogueIdx(idx)
-        setTimeout(() => typeDialogueLine(idx + 1, lines, onDone), 400)
+  // 对话打字机
+  useEffect(() => {
+    if (stage !== 'dialogue' || !scene || !scene.dialogues || scene.dialogues.length === 0) {
+      if (stage === 'dialogue' && scene && (!scene.dialogues || scene.dialogues.length === 0)) {
+        setStage('options')
       }
+      return
+    }
+    if (dialogueIdx >= scene.dialogues.length) {
+      setStage('options')
+      return
+    }
+    const line = scene.dialogues[dialogueIdx].text
+    setDialogueText("")
+    const total = line.length * 30 + 400
+    const id = setTimeout(() => {
+      setDialogueIdx((i) => i + 1)
+    }, total)
+    return () => clearTimeout(id)
+  }, [stage, dialogueIdx, scene])
+
+  // 对话文本逐字递增（独立 effect 避免主流程 race）
+  useEffect(() => {
+    if (stage !== 'dialogue' || !scene || dialogueIdx >= scene.dialogues.length) return
+    const line = scene.dialogues[dialogueIdx].text
+    if (dialogueText.length >= line.length) return
+    const id = setTimeout(() => {
+      setDialogueText(line.slice(0, dialogueText.length + 1))
     }, 30)
-    typingRef.current = id
-  }
+    return () => clearTimeout(id)
+  }, [stage, dialogueIdx, dialogueText, scene])
 
-  function startScene() {
-    if (!currentChapter) return
-    const s = currentChapter.scenes[sceneIdx]
-    if (!s) return
-    const dls = s.dialogues || []
-    setShowOptions(false)
-    setDisplayedNarration("")
-    setDialogueText("")
-    setDialogueIdx(0)
-    typeNarration(s.narration, () => {
-      if (dls.length > 0) {
-        startDialogue(dls, () => setShowOptions(true))
-      } else {
-        setShowOptions(true)
-      }
-    })
-  }
-
-  function openChapter(ch: Chapter) {
+  const openChapter = useCallback((ch: Chapter) => {
     if (ch.locked) return
-    if (typingRef.current) clearInterval(typingRef.current)
-    typingRef.current = null
     setShowOptions(false)
     setDisplayedNarration("")
     setDialogueText("")
@@ -95,28 +78,21 @@ export default function StoryPage() {
     setCurrentChapter(ch)
     setSceneIdx(0)
     setMode('play')
-    setTimeout(() => {
-      const chap = CHAPTERS.find((c) => c.id === ch.id)
-      if (chap) startScene()
-    }, 100)
-  }
+    setStage('narration')
+  }, [])
 
-  function backToGrid() {
-    if (typingRef.current) clearInterval(typingRef.current)
-    typingRef.current = null
+  const backToGrid = useCallback(() => {
     setShowOptions(false)
     setDisplayedNarration("")
     setDialogueText("")
     setDialogueIdx(0)
     setCurrentChapter(null)
     setSceneIdx(0)
+    setStage('idle')
     setMode('grid')
-  }
+  }, [])
 
   function handleOption(opt: StoryOption) {
-    if (typingRef.current) clearInterval(typingRef.current)
-    typingRef.current = null
-
     if (opt.secretTrigger) {
       if (currentChapter) unlockChapter(currentChapter.id)
     }
@@ -131,7 +107,7 @@ export default function StoryPage() {
         setDialogueIdx(0)
         setCurrentChapter(nextChap)
         setSceneIdx(0)
-        setTimeout(() => startScene(), 100)
+        setStage('narration')
         return
       }
     }
@@ -164,12 +140,22 @@ export default function StoryPage() {
       setDialogueText("")
       setDialogueIdx(0)
       setSceneIdx(nextIdx)
-      setTimeout(() => startScene(), 100)
+      setStage('narration')
     } else {
-      // chapter end
       if (currentChapter) unlockChapter(currentChapter.id)
       alert(`🎉 章节完成！恭喜你完成了第${currentChapter?.id}章：${currentChapter?.title}`)
       backToGrid()
+    }
+  }
+
+  // 跳过当前打字：旁白未打完 → 直接填全文 + 进对话；对话未打完 → 直接填全文 + 跳到下一行
+  function skipTyping() {
+    if (stage === 'narration' && scene) {
+      setDisplayedNarration(scene.narration)
+      setStage('dialogue')
+    } else if (stage === 'dialogue' && scene && dialogueIdx < scene.dialogues.length) {
+      setDialogueText(scene.dialogues[dialogueIdx].text)
+      setDialogueIdx((i) => i + 1)
     }
   }
 
@@ -221,14 +207,17 @@ export default function StoryPage() {
 
   // PLAY MODE
   return (
-    <main className="relative min-h-screen bg-gradient-to-b from-[#03040a] via-[#05060d] to-[#0a0d1c] px-5 pt-12 pb-32">
+    <main
+      className="relative min-h-screen bg-gradient-to-b from-[#03040a] via-[#05060d] to-[#0a0d1c] px-5 pt-12 pb-32"
+      onClick={stage !== 'options' ? skipTyping : undefined}
+    >
       <div className="flex items-center justify-between mb-4">
         <button onClick={backToGrid} className="text-2xl text-white">←</button>
         <span className="text-[10px] font-mono text-white/40">CH.0{currentChapter?.id} · {currentChapter?.title}</span>
-        {showOptions && (
-          <button onClick={backToGrid} className="text-[10px] text-white/30 px-2 py-1 rounded border border-white/10">← 返回章节</button>
+        {stage !== 'options' && (
+          <button onClick={(e) => { e.stopPropagation(); skipTyping() }} className="text-[10px] text-white/40 px-2 py-1 rounded border border-white/10">跳过 ▸</button>
         )}
-        {!showOptions && <span className="w-16" />}
+        {stage === 'options' && <span className="w-12" />}
       </div>
 
       {/* Narration */}
@@ -239,18 +228,29 @@ export default function StoryPage() {
       )}
 
       {/* Dialogues */}
-      {scene?.dialogues?.slice(0, dialogueIdx + 1).map((d, i) => (
+      {scene?.dialogues?.slice(0, dialogueIdx).map((d, i) => (
         <div key={i} className="mb-3 flex gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#11152a] border border-white/10 text-lg flex-shrink-0">{d.characterIcon}</div>
           <div className="flex-1 min-w-0">
             <p className="text-[10px] font-mono tracking-[0.2em] text-[#ffb547] mb-1">{d.character}</p>
-            <p className="text-sm text-white/80 leading-relaxed">{i < dialogueIdx ? d.text : dialogueText}</p>
+            <p className="text-sm text-white/80 leading-relaxed">{d.text}</p>
           </div>
         </div>
       ))}
 
+      {/* 当前正在打字的那一行 */}
+      {stage === 'dialogue' && scene?.dialogues && dialogueIdx < scene.dialogues.length && dialogueText && (
+        <div className="mb-3 flex gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#11152a] border border-white/10 text-lg flex-shrink-0">{scene.dialogues[dialogueIdx].characterIcon}</div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-mono tracking-[0.2em] text-[#ffb547] mb-1">{scene.dialogues[dialogueIdx].character}</p>
+            <p className="text-sm text-white/80 leading-relaxed">{dialogueText}<span className="inline-block w-1.5 h-3 ml-0.5 bg-[#5cf3ff] animate-pulse" /></p>
+          </div>
+        </div>
+      )}
+
       {/* Options */}
-      {showOptions && scene && (
+      {stage === 'options' && scene && (
         <div className="mt-6 space-y-2">
           {scene.options.map((opt) => (
             <button key={opt.id} onClick={() => handleOption(opt)}
