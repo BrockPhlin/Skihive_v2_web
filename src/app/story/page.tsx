@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { CHAPTERS, type Chapter, type StoryOption } from "@/lib/story-data"
+import { CHAPTERS, type Chapter, type StoryOption, type DialogLine } from "@/lib/story-data"
 import { useFlightStore } from "@/stores/flight-store"
 
 export default function StoryPage() {
@@ -25,56 +25,59 @@ export default function StoryPage() {
   })
 
   const scene = currentChapter?.scenes[sceneIdx]
-  const dialogues = scene?.dialogues || []
 
   // 打字机效果 - 旁白
   function typeNarration(text: string, onDone: () => void) {
     if (typingRef.current) clearInterval(typingRef.current)
     setDisplayedNarration("")
     let i = 0
-    typingRef.current = setInterval(() => {
+    const id = setInterval(() => {
       i++
       setDisplayedNarration(text.slice(0, i))
       if (i >= text.length) {
-        if (typingRef.current) clearInterval(typingRef.current)
+        clearInterval(id)
         typingRef.current = null
         setTimeout(onDone, 300)
       }
     }, 40)
+    typingRef.current = id
   }
 
-  function startDialogue(onDone: () => void) {
+  function startDialogue(lines: DialogLine[], onDone: () => void) {
     setDialogueIdx(0)
     setDialogueText("")
-    typeDialogueLine(0, onDone)
+    typeDialogueLine(0, lines, onDone)
   }
 
-  function typeDialogueLine(idx: number, onDone: () => void) {
-    if (idx >= dialogues.length) { setTimeout(onDone, 300); return }
+  function typeDialogueLine(idx: number, lines: DialogLine[], onDone: () => void) {
+    if (idx >= lines.length) { setTimeout(onDone, 300); return }
     setDialogueText("")
-    const line = dialogues[idx].text
+    const line = lines[idx].text
     let i = 0
-    typingRef.current = setInterval(() => {
+    const id = setInterval(() => {
       i++
       setDialogueText(line.slice(0, i))
       if (i >= line.length) {
-        if (typingRef.current) clearInterval(typingRef.current)
-        typingRef.current = null
+        clearInterval(id)
         setDialogueIdx(idx)
-        setTimeout(() => typeDialogueLine(idx + 1, onDone), 400)
+        setTimeout(() => typeDialogueLine(idx + 1, lines, onDone), 400)
       }
     }, 30)
+    typingRef.current = id
   }
 
   function startScene() {
-    if (!scene) return
+    if (!currentChapter) return
+    const s = currentChapter.scenes[sceneIdx]
+    if (!s) return
+    const dls = s.dialogues || []
     setShowOptions(false)
     setDisplayedNarration("")
     setDialogueText("")
     setDialogueIdx(0)
-    typeNarration(scene.narration, () => {
-      if (dialogues.length > 0) {
-        startDialogue(() => setShowOptions(true))
+    typeNarration(s.narration, () => {
+      if (dls.length > 0) {
+        startDialogue(dls, () => setShowOptions(true))
       } else {
         setShowOptions(true)
       }
@@ -236,7 +239,7 @@ export default function StoryPage() {
       )}
 
       {/* Dialogues */}
-      {dialogues.slice(0, dialogueIdx + 1).map((d, i) => (
+      {scene?.dialogues?.slice(0, dialogueIdx + 1).map((d, i) => (
         <div key={i} className="mb-3 flex gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#11152a] border border-white/10 text-lg flex-shrink-0">{d.characterIcon}</div>
           <div className="flex-1 min-w-0">
