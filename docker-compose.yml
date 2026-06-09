@@ -1,26 +1,40 @@
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: skihive-postgres
     environment:
       POSTGRES_DB: skihive
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d skihive"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - skihive-net
 
   nextjs:
     build: .
+    container_name: skihive-nextjs
     environment:
       DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@postgres:5432/skihive?schema=public
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       NEXTAUTH_URL: https://${DOMAIN}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     restart: always
+    networks:
+      - skihive-net
 
   nginx:
     image: nginx:alpine
+    container_name: skihive-nginx
     ports:
       - "80:80"
       - "443:443"
@@ -30,6 +44,13 @@ services:
     depends_on:
       - nextjs
     restart: always
+    networks:
+      - skihive-net
 
 volumes:
   pgdata:
+    driver: local
+
+networks:
+  skihive-net:
+    driver: bridge

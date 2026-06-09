@@ -11,11 +11,31 @@ export default function RecordsPage() {
   const [loading, setLoading] = useState(true)
 
   function load() {
-    try {
-      const stored = JSON.parse(localStorage.getItem('skihive_flight_records') || '[]') as Record[]
-      setRecords(stored)
-    } catch { setRecords([]) }
-    setLoading(false)
+    setLoading(true)
+    const userId = (() => {
+      try {
+        const u = JSON.parse(localStorage.getItem('skihive_user_info') || 'null') as { id?: string } | null
+        return u?.id || ''
+      } catch { return '' }
+    })()
+    const isAdmin = (() => {
+      try {
+        const u = JSON.parse(localStorage.getItem('skihive_user_info') || 'null') as { isAdmin?: boolean } | null
+        return u?.isAdmin ? 'true' : 'false'
+      } catch { return 'false' }
+    })()
+    const url = `/api/records/list${userId ? `?userId=${userId}&isAdmin=${isAdmin}` : ''}`
+    fetch(url).then(r => r.json()).then(d => {
+      setRecords(d.records || [])
+      setLoading(false)
+    }).catch(() => {
+      // fallback to localStorage
+      try {
+        const stored = JSON.parse(localStorage.getItem('skihive_flight_records') || '[]') as Record[]
+        setRecords(stored)
+      } catch { setRecords([]) }
+      setLoading(false)
+    })
   }
 
   useEffect(() => { load() }, [])

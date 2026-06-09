@@ -1,16 +1,23 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from 'next/server'
+import { PrismaClient } from '@prisma/client'
 
-// 飞行记录保存到浏览器 localStorage，这里 mock 返回数据
-export async function GET() {
-  return NextResponse.json({ records: [] })
-}
+const prisma = new PrismaClient()
 
-export async function POST(req: Request) {
+export async function GET(req: NextRequest) {
   try {
-    const record = await req.json()
-    // 本地开发模式：返回成功，前端自己存 localStorage
-    return NextResponse.json({ success: true, id: Date.now().toString(), record })
-  } catch {
-    return NextResponse.json({ success: false }, { status: 400 })
+    const { searchParams } = new URL(req.url)
+    const userId = searchParams.get('userId')
+    const isAdmin = searchParams.get('isAdmin') === 'true'
+
+    const where = isAdmin ? {} : userId ? { userId } : {}
+    const records = await prisma.flightRecord.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    })
+    return NextResponse.json({ records })
+  } catch (e: any) {
+    console.error('[records/list] error:', e)
+    return NextResponse.json({ records: [] })
   }
 }
