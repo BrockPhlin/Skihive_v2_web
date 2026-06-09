@@ -22,7 +22,7 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # 安装 OpenSSL (Prisma 运行时可能需要) + curl (healthcheck)
-RUN apk add --no-cache openssl curl
+RUN apk add --no-cache openssl curl busybox-extras
 
 # 复制必要文件
 COPY --from=builder /app/node_modules ./node_modules
