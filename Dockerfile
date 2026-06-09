@@ -1,8 +1,8 @@
-# Stage 1 — 安装完整依赖 (含 prisma 用于 build 期间 generate)
+# Stage 1 — 安装完整依赖 (含 devDependencies,prisma generate 需要)
 FROM node:20-alpine AS deps
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json package-lock.json* ./
+RUN npm install
 
 # Stage 2 — build
 FROM node:20-alpine AS builder
@@ -29,8 +29,7 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/prisma.config.ts ./
-COPY --from=builder /app/next.config.ts ./
+COPY --from=builder /app/next.config.mjs ./
 COPY --from=builder /app/entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
