@@ -12,14 +12,16 @@ COPY prisma ./prisma
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATABASE_URL=postgresql://placeholder:placeholder@localhost:5432/placeholder
-RUN npx prisma generate
 RUN npm run build
+# 必须在 next build 之后跑!next build 会自动 prisma generate 用错平台
+RUN npx prisma generate
 
 # Stage 3 — 生产镜像
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV PRISMA_HIDE_UPDATE_MESSAGE=1
 
 # 切换 Alpine 源到清华镜像(国内访问 dl-cdn.alpinelinux.org 太慢)
 RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apk/repositories
