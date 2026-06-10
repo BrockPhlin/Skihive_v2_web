@@ -14,7 +14,7 @@ done
 
 echo "==> [entrypoint] 跑 prisma migrate deploy..."
 # 不再用 grep 匹配输出,直接 set -e 在失败时退出
-npx prisma migrate deploy --schema=./prisma/schema.prisma
+npx prisma db push --skip-generate --accept-data-loss
 echo "==> [entrypoint] 数据库迁移完成"
 
 # Seed 管理员账号 (admin/123456)
