@@ -12,8 +12,11 @@ COPY prisma ./prisma
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATABASE_URL=postgresql://placeholder:placeholder@localhost:5432/placeholder
+# 1. 先生成 prisma client(让 @prisma/client 导出 PrismaClient 类)
+RUN npx prisma generate
+# 2. 然后 build(next build 期间 next 会自动 prisma generate 用错平台,但因为上一步已经生成了 client,类型检查能过)
 RUN npm run build
-# 必须在 next build 之后跑!next build 会自动 prisma generate 用错平台
+# 3. 再次 prisma generate(覆盖 next build 期间生成的 client,加上正确的 binaryTargets)
 RUN npx prisma generate
 
 # Stage 3 — 生产镜像
