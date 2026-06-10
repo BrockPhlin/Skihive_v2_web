@@ -21,7 +21,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# 安装 OpenSSL (Prisma 运行时可能需要) + curl (healthcheck)
+# 切换 Alpine 源到清华镜像(国内访问 dl-cdn.alpinelinux.org 太慢)
+RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apk/repositories
+
+# 安装 OpenSSL (Prisma 运行时可能需要) + curl (healthcheck) + busybox-extras (nc)
 RUN apk add --no-cache openssl curl busybox-extras
 
 # 复制必要文件
